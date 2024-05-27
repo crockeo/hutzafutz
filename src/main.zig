@@ -46,6 +46,13 @@ const Vec = struct {
         const magnitude = self.mag();
         return Vec.new(self.x / magnitude, self.y / magnitude);
     }
+
+    pub inline fn as_vector2(self: Vec) rl.Vector2 {
+        return rl.Vector2{
+            .x = self.x,
+            .y = self.y,
+        };
+    }
 };
 
 fn sign(value: f32) i32 {
@@ -70,6 +77,13 @@ pub fn main() !void {
     var velocity: Vec = Vec.zero;
     var position: Vec = Vec.zero;
 
+    const asdf = rl.Rectangle{
+        .x = 100,
+        .y = 400,
+        .width = 100,
+        .height = 40,
+    };
+
     rl.setTargetFPS(60);
     while (!rl.windowShouldClose()) {
         rl.beginDrawing();
@@ -82,6 +96,10 @@ pub fn main() !void {
             50,
             rl.Color.red,
         );
+        rl.drawCircle(@intFromFloat(position.x), @intFromFloat(position.y), 10, rl.Color.orange);
+
+        rl.drawRectangleRec(asdf, rl.Color.blue);
+        rl.drawCircle(asdf.x, asdf.y, 10, rl.Color.white);
 
         const frameTime = rl.getFrameTime();
 
@@ -121,7 +139,41 @@ pub fn main() !void {
             velocity.y = 0;
         }
 
-        position = position.add(velocity.mul(frameTime));
+        const collides = rl.checkCollisionRecs(
+            rl.Rectangle{
+                .x = position.x,
+                .y = position.y,
+                .width = 50,
+                .height = 50,
+            },
+            asdf,
+        );
+        if (collides) {
+            const midPos = position.add(Vec.new(25, 25));
+            const theirMidPos = Vec.new(asdf.x + (asdf.width / 2), asdf.y + (asdf.height / 2));
+            const diff = midPos.sub(theirMidPos);
+            const normalizedDiff = Vec.new(diff.x / (25 + asdf.width / 2), diff.y / (25 + asdf.height / 2)).normalized();
+
+            if (@abs(normalizedDiff.x) >= @abs(normalizedDiff.y)) {
+                // Primarily horizontal collision.
+                if (midPos.x < theirMidPos.x) {
+                    position.x = asdf.x - 50;
+                } else {
+                    position.x = asdf.x + asdf.width;
+                }
+                velocity.x = 0;
+            } else {
+                // Primarily vertical collision.
+                if (midPos.y < theirMidPos.y) {
+                    position.y = asdf.y - 50;
+                } else {
+                    position.y = asdf.y + asdf.height;
+                }
+                velocity.y = 0;
+            }
+        } else {
+            position = position.add(velocity.mul(frameTime));
+        }
     }
 }
 
