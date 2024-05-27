@@ -48,6 +48,16 @@ const Vec = struct {
     }
 };
 
+fn sign(value: f32) i32 {
+    if (value < 0) {
+        return -1;
+    }
+    if (value > 0) {
+        return 1;
+    }
+    return 0;
+}
+
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
     std.debug.print("All your {s} are belong to us.\n", .{"codebase"});
@@ -83,8 +93,9 @@ pub fn main() !void {
             direction = direction.add(Vec.left);
         } else if (!leftPressed and rightPressed) {
             direction = direction.add(Vec.right);
-        } else if (velocity.x != 0) {
-            direction.x = -velocity.normalized().x;
+        }
+        if (velocity.x != 0 and (direction.x == 0 or (direction.x != 0 and sign(direction.x) != sign(velocity.x)))) {
+            direction.x += -velocity.normalized().x;
         }
 
         const upPressed = rl.isKeyDown(rl.KeyboardKey.key_up);
@@ -93,8 +104,9 @@ pub fn main() !void {
             direction = direction.add(Vec.up);
         } else if (!upPressed and downPressed) {
             direction = direction.add(Vec.down);
-        } else if (velocity.y != 0) {
-            direction.y = -velocity.normalized().y;
+        }
+        if (velocity.y != 0 and (direction.y == 0 or (direction.y != 0 and sign(direction.y) != sign(velocity.y)))) {
+            direction.y += -velocity.normalized().y;
         }
 
         velocity = velocity.add(direction.mul(acceleration).mul(frameTime));
