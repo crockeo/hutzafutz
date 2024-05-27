@@ -1,69 +1,61 @@
 const rl = @import("raylib");
 const std = @import("std");
 
-const Vec = struct {
-    x: f32,
-    y: f32,
+const input = @import("input.zig");
+const math = @import("math.zig");
+const Vec = math.Vec;
 
-    pub inline fn new(x: f32, y: f32) Vec {
-        return Vec{
-            .x = x,
-            .y = y,
+const World = struct {
+    inputManager: input.InputManager,
+    player: Player,
+
+    pub fn new() World {
+        const inputManager = input.InputManager.new(.{
+            rl.KeyboardKey.key_left,
+            rl.KeyboardKey.key_down,
+            rl.KeyboardKey.key_right,
+            rl.KeyboardKey.key_space,
+        });
+        return World{
+            .inputManager = inputManager,
+            .player = Player.new(&inputManager),
         };
     }
 
-    const zero = Vec.new(0, 0);
-    const left = Vec.new(-1, 0);
-    const right = Vec.new(1, 0);
-    const up = Vec.new(0, -1);
-    const down = Vec.new(0, 1);
-
-    pub inline fn add(self: Vec, other: Vec) Vec {
-        return Vec.new(self.x + other.x, self.y + other.y);
+    pub fn render(self: *World) void {
+        self.player.render();
     }
 
-    pub inline fn inverse(self: Vec) Vec {
-        return Vec.new(-self.x, -self.y);
-    }
-
-    pub inline fn sub(self: Vec, other: Vec) Vec {
-        return self.add(other.inverse());
-    }
-
-    pub inline fn mul(self: Vec, magnitude: f32) Vec {
-        return Vec.new(self.x * magnitude, self.y * magnitude);
-    }
-
-    pub inline fn magSqrd(self: Vec) f32 {
-        return self.x * self.x + self.y * self.y;
-    }
-
-    pub inline fn mag(self: Vec) f32 {
-        return @sqrt(self.magSqrd());
-    }
-
-    pub inline fn normalized(self: Vec) Vec {
-        const magnitude = self.mag();
-        return Vec.new(self.x / magnitude, self.y / magnitude);
-    }
-
-    pub inline fn as_vector2(self: Vec) rl.Vector2 {
-        return rl.Vector2{
-            .x = self.x,
-            .y = self.y,
-        };
+    pub fn update(self: *World, frameTime: f32) void {
+        self.player.update(self, frameTime);
     }
 };
 
-fn sign(value: f32) i32 {
-    if (value < 0) {
-        return -1;
+const Player = struct {
+    const acceleration: f32 = 2000;
+    const maxSpeed: f32 = 500;
+
+    velocity: Vec,
+    position: Vec,
+    size: Vec,
+    inputManager: *const input.InputManager,
+
+    pub fn new(inputManager: *const input.InputManager) Player {
+        return Player{
+            .velocity = Vec.zero,
+            .position = Vec.zero,
+            .size = Vec.new(50, 50),
+            .inputManager = inputManager,
+        };
     }
-    if (value > 0) {
-        return 1;
+
+    pub fn render(self: *Player) void {
+        rl.drawRectangleV(self.position.as_vector2(), self.size.as_vector2(), rl.Color.red);
     }
-    return 0;
-}
+
+    pub fn update(_: *Player, _: *World, _: f32) void {
+    }
+};
 
 pub fn main() !void {
     // Prints to stderr (it's a shortcut based on `std.io.getStdErr()`)
@@ -84,11 +76,14 @@ pub fn main() !void {
         .height = 40,
     };
 
+    var world = World.new();
+
     rl.setTargetFPS(60);
     while (!rl.windowShouldClose()) {
         rl.beginDrawing();
         defer rl.endDrawing();
         rl.clearBackground(rl.Color.white);
+        world.render();
         rl.drawRectangle(
             @intFromFloat(position.x),
             @intFromFloat(position.y),
@@ -102,6 +97,7 @@ pub fn main() !void {
         rl.drawCircle(asdf.x, asdf.y, 10, rl.Color.white);
 
         const frameTime = rl.getFrameTime();
+        world.update(frameTime);
 
         var direction = Vec.zero;
 
@@ -112,7 +108,7 @@ pub fn main() !void {
         } else if (!leftPressed and rightPressed) {
             direction = direction.add(Vec.right);
         }
-        if (velocity.x != 0 and (direction.x == 0 or (direction.x != 0 and sign(direction.x) != sign(velocity.x)))) {
+        if (velocity.x != 0 and (direction.x == 0 or (direction.x != 0 and math.sign(direction.x) != math.sign(velocity.x)))) {
             direction.x += -velocity.normalized().x;
         }
 
@@ -123,7 +119,7 @@ pub fn main() !void {
         } else if (!upPressed and downPressed) {
             direction = direction.add(Vec.down);
         }
-        if (velocity.y != 0 and (direction.y == 0 or (direction.y != 0 and sign(direction.y) != sign(velocity.y)))) {
+        if (velocity.y != 0 and (direction.y == 0 or (direction.y != 0 and math.sign(direction.y) != math.sign(velocity.y)))) {
             direction.y += -velocity.normalized().y;
         }
 
