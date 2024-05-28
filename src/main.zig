@@ -3,27 +3,45 @@ const std = @import("std");
 
 const input = @import("input.zig");
 const math = @import("math.zig");
+const tiled = @import("tiled.zig");
+
 const Vec = math.Vec;
 
 const World = struct {
     inputManager: input.InputManager,
     player: Player,
+    map: tiled.TiledMap,
 
-    pub fn new() World {
+    pub fn new(allocator: std.mem.Allocator, project_root: std.fs.Dir) !World {
         const inputManager = input.InputManager.new(.{
             rl.KeyboardKey.key_left,
             rl.KeyboardKey.key_down,
             rl.KeyboardKey.key_right,
             rl.KeyboardKey.key_space,
         });
+        const player = Player.new(&inputManager);
+
+        const mapPath = try project_root.realpathAlloc(allocator, "./assets/maps/home.tmx");
+        defer allocator.free(mapPath);
+        const map = try tiled.TiledMap.new(
+            allocator,
+            mapPath,
+        );
+
         return World{
             .inputManager = inputManager,
-            .player = Player.new(&inputManager),
+            .player = player,
+            .map = map,
         };
+    }
+
+    pub fn deinit(self: *World) void {
+        self.map.deinit();
     }
 
     pub fn render(self: *World) void {
         self.player.render();
+        self.map.render();
     }
 
     pub fn update(self: *World, frameTime: f32) void {
@@ -53,8 +71,7 @@ const Player = struct {
         rl.drawRectangleV(self.position.as_vector2(), self.size.as_vector2(), rl.Color.red);
     }
 
-    pub fn update(_: *Player, _: *World, _: f32) void {
-    }
+    pub fn update(_: *Player, _: *World, _: f32) void {}
 };
 
 pub fn main() !void {
@@ -63,6 +80,12 @@ pub fn main() !void {
 
     rl.initWindow(640, 480, "raylib");
     defer rl.closeWindow();
+
+    const allocator: std.mem.Allocator = std.heap.page_allocator;
+    const projectRoot = std.fs.cwd();
+    var world = try World.new(allocator, projectRoot);
+    defer world.deinit();
+
 
     const acceleration: f32 = 2000;
     const maxSpeed: f32 = 500;
@@ -75,8 +98,6 @@ pub fn main() !void {
         .width = 100,
         .height = 40,
     };
-
-    var world = World.new();
 
     rl.setTargetFPS(60);
     while (!rl.windowShouldClose()) {
