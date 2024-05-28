@@ -16,16 +16,16 @@
             "scale": 0.7612179487179487,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 234.49263157894734,
-                "y": 135.96631578947367
+                "x": 234.49263157894737,
+                "y": 135.9663157894737
             }
         },
         "assets/kenney-pixel-platformer/Tiled/tilemap-example-b.tmx": {
             "scale": 0.7612179487179487,
             "selectedLayer": 0,
             "viewCenter": {
-                "x": 234.49263157894734,
-                "y": 135.96631578947367
+                "x": 234.49263157894737,
+                "y": 135.9663157894737
             }
         },
         "assets/kenney-pixel-platformer/Tiled/tileset-characters.tsx": {
@@ -37,11 +37,11 @@
             "scaleInEditor": 1
         },
         "assets/maps/home.tmx": {
-            "scale": 1.9359,
+            "scale": 1.2435,
             "selectedLayer": 1,
             "viewCenter": {
-                "x": -127.33095717754017,
-                "y": 114.93362260447336
+                "x": 53.47808604744671,
+                "y": 159.63007639726575
             }
         }
     },
@@ -55,10 +55,10 @@
     ],
     "project": "hutzafutz.tiled-project",
     "recentFiles": [
-        "assets/kenney-pixel-platformer/Tiled/tileset-characters.tsx",
-        "assets/maps/home.tmx",
-        "assets/kenney-pixel-platformer/Tiled/tileset-tiles.tsx",
+        "assets/kenney-pixel-platformer/Tiled/tilemap-example-b.tmx",
         "assets/kenney-pixel-platformer/Tiled/tilemap-example-a.tmx",
-        "assets/kenney-pixel-platformer/Tiled/tilemap-example-b.tmx"
+        "assets/maps/home.tmx",
+        "assets/kenney-pixel-platformer/Tiled/tileset-characters.tsx",
+        "assets/kenney-pixel-platformer/Tiled/tileset-tiles.tsx"
     ]
 }

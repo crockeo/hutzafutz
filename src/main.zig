@@ -21,6 +21,8 @@ const World = struct {
         });
         const player = Player.new(&inputManager);
 
+        // TODO: try out with mapPath like this:
+        // const mapPath = try project_root.realpathAlloc(allocator, "./assets/kenney-pixel-platformer/Tiled/tilemap-example-a.tmx");
         const mapPath = try project_root.realpathAlloc(allocator, "./assets/maps/home.tmx");
         defer allocator.free(mapPath);
         const map = try tiled.TiledMap.new(
