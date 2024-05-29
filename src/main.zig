@@ -180,7 +180,7 @@ pub fn main() !void {
                 } else {
                     position.x = asdf.x + asdf.width;
                 }
-                velocity.x = 0;
+                velocity.x = -velocity.x * 0.5;
             } else {
                 // Primarily vertical collision.
                 if (midPos.y < theirMidPos.y) {
@@ -188,7 +188,7 @@ pub fn main() !void {
                 } else {
                     position.y = asdf.y + asdf.height;
                 }
-                velocity.y = 0;
+                velocity.y = -velocity.y * 0.5;
             }
         } else {
             position = position.add(velocity.mul(frameTime));
