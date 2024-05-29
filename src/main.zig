@@ -10,6 +10,7 @@ const Vec = math.Vec;
 const World = struct {
     inputManager: input.InputManager,
     player: Player,
+    asdf: rl.Rectangle,
     map: tiled.TiledMap,
 
     pub fn new(allocator: std.mem.Allocator, project_root: std.fs.Dir) !World {
@@ -33,6 +34,12 @@ const World = struct {
         return World{
             .inputManager = inputManager,
             .player = player,
+            .asdf = rl.Rectangle{
+                .x = 100,
+                .y = 400,
+                .width = 100,
+                .height = 40,
+            },
             .map = map,
         };
     }
@@ -41,7 +48,7 @@ const World = struct {
         self.map.deinit();
     }
 
-    pub fn render(self: *World) void {
+    pub fn render(self: *const World) void {
         self.player.render();
         self.map.render();
     }
@@ -69,11 +76,84 @@ const Player = struct {
         };
     }
 
-    pub fn render(self: *Player) void {
+    pub fn render(self: *const Player) void {
         rl.drawRectangleV(self.position.as_vector2(), self.size.as_vector2(), rl.Color.red);
     }
 
-    pub fn update(_: *Player, _: *World, _: f32) void {}
+    pub fn update(self: *Player, world: *World, frameTime: f32) void {
+        var direction = Vec.zero;
+
+        const leftPressed = rl.isKeyDown(rl.KeyboardKey.key_left);
+        const rightPressed = rl.isKeyDown(rl.KeyboardKey.key_right);
+        if (leftPressed and !rightPressed) {
+            direction = direction.add(Vec.left);
+        } else if (!leftPressed and rightPressed) {
+            direction = direction.add(Vec.right);
+        }
+        if (self.velocity.x != 0 and (direction.x == 0 or (direction.x != 0 and math.sign(direction.x) != math.sign(self.velocity.x)))) {
+            direction.x += -self.velocity.normalized().x;
+        }
+
+        const upPressed = rl.isKeyDown(rl.KeyboardKey.key_up);
+        const downPressed = rl.isKeyDown(rl.KeyboardKey.key_down);
+        if (upPressed and !downPressed) {
+            direction = direction.add(Vec.up);
+        } else if (!upPressed and downPressed) {
+            direction = direction.add(Vec.down);
+        }
+        if (self.velocity.y != 0 and (direction.y == 0 or (direction.y != 0 and math.sign(direction.y) != math.sign(self.velocity.y)))) {
+            direction.y += -self.velocity.normalized().y;
+        }
+
+        self.velocity = self.velocity.add(direction.mul(acceleration).mul(frameTime));
+        const mag = self.velocity.mag();
+        if (mag > maxSpeed) {
+            self.velocity = self.velocity.mul(maxSpeed / mag);
+        }
+        if (!leftPressed and !rightPressed and @abs(self.velocity.x * frameTime) < 1) {
+            self.velocity.x = 0;
+        }
+        if (!upPressed and !downPressed and @abs(self.velocity.y * frameTime) < 1) {
+            self.velocity.y = 0;
+        }
+
+        const collides = rl.checkCollisionRecs(
+            rl.Rectangle{
+                .x = self.position.x,
+                .y = self.position.y,
+                .width = 50,
+                .height = 50,
+            },
+            world.asdf,
+        );
+
+        if (collides) {
+            const midPos = self.position.add(Vec.new(25, 25));
+            const theirMidPos = Vec.new(world.asdf.x + (world.asdf.width / 2), world.asdf.y + (world.asdf.height / 2));
+            const diff = midPos.sub(theirMidPos);
+            const normalizedDiff = Vec.new(diff.x / (25 + world.asdf.width / 2), diff.y / (25 + world.asdf.height / 2)).normalized();
+
+            if (@abs(normalizedDiff.x) >= @abs(normalizedDiff.y)) {
+                // Primarily horizontal collision.
+                if (midPos.x < theirMidPos.x) {
+                    self.position.x = world.asdf.x - 50;
+                } else {
+                    self.position.x = world.asdf.x + world.asdf.width;
+                }
+                self.velocity.x = -self.velocity.x * 0.5;
+            } else {
+                // Primarily vertical collision.
+                if (midPos.y < theirMidPos.y) {
+                    self.position.y = world.asdf.y - 50;
+                } else {
+                    self.position.y = world.asdf.y + world.asdf.height;
+                }
+                self.velocity.y = -self.velocity.y * 0.5;
+            }
+        } else {
+            self.position = self.position.add(self.velocity.mul(frameTime));
+        }
+    }
 };
 
 pub fn main() !void {
@@ -88,12 +168,6 @@ pub fn main() !void {
     var world = try World.new(allocator, projectRoot);
     defer world.deinit();
 
-
-    const acceleration: f32 = 2000;
-    const maxSpeed: f32 = 500;
-    var velocity: Vec = Vec.zero;
-    var position: Vec = Vec.zero;
-
     const asdf = rl.Rectangle{
         .x = 100,
         .y = 400,
@@ -107,92 +181,11 @@ pub fn main() !void {
         defer rl.endDrawing();
         rl.clearBackground(rl.Color.white);
         world.render();
-        rl.drawRectangle(
-            @intFromFloat(position.x),
-            @intFromFloat(position.y),
-            50,
-            50,
-            rl.Color.red,
-        );
-        rl.drawCircle(@intFromFloat(position.x), @intFromFloat(position.y), 10, rl.Color.orange);
-
         rl.drawRectangleRec(asdf, rl.Color.blue);
         rl.drawCircle(asdf.x, asdf.y, 10, rl.Color.white);
 
         const frameTime = rl.getFrameTime();
         world.update(frameTime);
-
-        var direction = Vec.zero;
-
-        const leftPressed = rl.isKeyDown(rl.KeyboardKey.key_left);
-        const rightPressed = rl.isKeyDown(rl.KeyboardKey.key_right);
-        if (leftPressed and !rightPressed) {
-            direction = direction.add(Vec.left);
-        } else if (!leftPressed and rightPressed) {
-            direction = direction.add(Vec.right);
-        }
-        if (velocity.x != 0 and (direction.x == 0 or (direction.x != 0 and math.sign(direction.x) != math.sign(velocity.x)))) {
-            direction.x += -velocity.normalized().x;
-        }
-
-        const upPressed = rl.isKeyDown(rl.KeyboardKey.key_up);
-        const downPressed = rl.isKeyDown(rl.KeyboardKey.key_down);
-        if (upPressed and !downPressed) {
-            direction = direction.add(Vec.up);
-        } else if (!upPressed and downPressed) {
-            direction = direction.add(Vec.down);
-        }
-        if (velocity.y != 0 and (direction.y == 0 or (direction.y != 0 and math.sign(direction.y) != math.sign(velocity.y)))) {
-            direction.y += -velocity.normalized().y;
-        }
-
-        velocity = velocity.add(direction.mul(acceleration).mul(frameTime));
-        const mag = velocity.mag();
-        if (mag > maxSpeed) {
-            velocity = velocity.mul(maxSpeed / mag);
-        }
-        if (!leftPressed and !rightPressed and @abs(velocity.x * frameTime) < 1) {
-            velocity.x = 0;
-        }
-        if (!upPressed and !downPressed and @abs(velocity.y * frameTime) < 1) {
-            velocity.y = 0;
-        }
-
-        const collides = rl.checkCollisionRecs(
-            rl.Rectangle{
-                .x = position.x,
-                .y = position.y,
-                .width = 50,
-                .height = 50,
-            },
-            asdf,
-        );
-        if (collides) {
-            const midPos = position.add(Vec.new(25, 25));
-            const theirMidPos = Vec.new(asdf.x + (asdf.width / 2), asdf.y + (asdf.height / 2));
-            const diff = midPos.sub(theirMidPos);
-            const normalizedDiff = Vec.new(diff.x / (25 + asdf.width / 2), diff.y / (25 + asdf.height / 2)).normalized();
-
-            if (@abs(normalizedDiff.x) >= @abs(normalizedDiff.y)) {
-                // Primarily horizontal collision.
-                if (midPos.x < theirMidPos.x) {
-                    position.x = asdf.x - 50;
-                } else {
-                    position.x = asdf.x + asdf.width;
-                }
-                velocity.x = -velocity.x * 0.5;
-            } else {
-                // Primarily vertical collision.
-                if (midPos.y < theirMidPos.y) {
-                    position.y = asdf.y - 50;
-                } else {
-                    position.y = asdf.y + asdf.height;
-                }
-                velocity.y = -velocity.y * 0.5;
-            }
-        } else {
-            position = position.add(velocity.mul(frameTime));
-        }
     }
 }
 

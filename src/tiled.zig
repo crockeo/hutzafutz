@@ -56,7 +56,7 @@ pub const TiledMap = struct {
         self.layers.deinit();
     }
 
-    pub fn render(self: *TiledMap) void {
+    pub fn render(self: *const TiledMap) void {
         for (self.layers.items) |item| {
             item.render(&self.tilesets.items[0]);
         }
