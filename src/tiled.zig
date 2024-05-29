@@ -9,6 +9,8 @@ const TiledMapError = error{
 };
 
 pub const TiledMap = struct {
+    tileWidth: i64,
+    tileHeight: i64,
     tilesets: std.ArrayList(Tileset),
     layers: std.ArrayList(Layer),
 
@@ -21,6 +23,9 @@ pub const TiledMap = struct {
 
         const document = try xml.parse(allocator, contents);
         defer document.deinit();
+
+        const tileWidth = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tilewidth")), 10);
+        const tileHeight = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tileheight")), 10);
 
         var tilesets = std.ArrayList(Tileset).init(allocator);
         {
@@ -39,6 +44,8 @@ pub const TiledMap = struct {
         }
 
         return TiledMap{
+            .tileWidth = tileWidth,
+            .tileHeight = tileHeight,
             .tilesets = tilesets,
             .layers = layers,
         };
@@ -58,18 +65,30 @@ pub const TiledMap = struct {
 
     pub fn render(self: *const TiledMap) void {
         for (self.layers.items) |item| {
-            item.render(&self.tilesets.items[0]);
+            item.render(self);
         }
+    }
+
+    fn lookupTileset(self: *const TiledMap, tile: usize) ?*const Tileset {
+        for (self.tilesets.items) |*tileset| {
+            if (tileset.firstGID <= tile and tileset.firstGID + tileset.tileCount > tile) {
+                return tileset;
+            }
+        }
+        return null;
     }
 };
 
 const Tileset = struct {
+    firstGID: usize,
+    tileCount: usize,
     tileWidth: i64,
     tileHeight: i64,
     columns: i64,
     texture: rl.Texture2D,
 
     fn fromXML(allocator: std.mem.Allocator, path: []const u8, tileset: *const xml.Element) !Tileset {
+        const firstGID = try std.fmt.parseInt(usize, try must([]const u8, tileset.getAttribute("firstgid")), 10);
         const source = try std.fs.path.resolve(
             allocator,
             &[_][]const u8{
@@ -90,6 +109,7 @@ const Tileset = struct {
 
         const tileWidth = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tilewidth")), 10);
         const tileHeight = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tileheight")), 10);
+        const tileCount = try std.fmt.parseInt(usize, try must([]const u8, document.root.getAttribute("tilecount")), 10);
         const columns = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("columns")), 10);
 
 
@@ -105,6 +125,8 @@ const Tileset = struct {
 
         const texture = rl.loadTexture(@ptrCast(imageSource));
         return Tileset{
+            .firstGID = firstGID,
+            .tileCount = tileCount,
             .tileWidth = tileWidth,
             .tileHeight = tileHeight,
             .columns = columns,
@@ -161,9 +183,9 @@ const Layer = struct {
         self.chunks.deinit();
     }
 
-    fn render(self: Layer, tileset: *Tileset) void {
+    fn render(self: Layer, tiledMap: *const TiledMap) void {
         for (self.chunks.items) |chunk| {
-            chunk.render(tileset);
+            chunk.render(tiledMap);
         }
     }
 };
@@ -219,18 +241,22 @@ const Chunk = struct {
         self.tiles.deinit();
     }
 
-    fn render(self: Chunk, tileset: *Tileset) void {
-        const xOffset = self.x * tileset.tileWidth;
-        const yOffset = self.y * tileset.tileHeight;
+    fn render(self: Chunk, tiledMap: *const TiledMap) void {
+        const xOffset = self.x * tiledMap.tileWidth;
+        const yOffset = self.y * tiledMap.tileHeight;
         var i: i64 = 0;
         for (self.tiles.items) |tile| {
+            defer i += 1;
             if (tile == 0) {
-                i += 1;
                 continue;
             }
 
             const col = @mod(i, self.width);
             const row = @divTrunc(i, self.width);
+            const tileset = tiledMap.lookupTileset(tile) orelse {
+                std.debug.print("Missing tile {}\n", .{tile});
+                continue;
+            };
             tileset.render(
                 @intCast(tile),
                 rl.Vector2{
@@ -238,8 +264,6 @@ const Chunk = struct {
                     .y = @floatFromInt(yOffset + row * tileset.tileHeight),
                 },
             );
-
-            i += 1;
         }
     }
 };
