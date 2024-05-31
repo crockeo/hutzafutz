@@ -4,266 +4,137 @@ const std = @import("std");
 const must = @import("must.zig").must;
 const xml = @import("xml.zig");
 
-const TiledMapError = error{
-    InvalidFormat,
+const c = @cImport({
+    @cInclude("stdlib.h");
+    @cInclude("tmx.h");
+    @cInclude("tmx_utils.h");
+});
+
+pub const MapError = error{
+    Unknown,
+    InvalidArgument,
+    AllocationError,
+    NoAccess,
+    FileNotFound,
+    FileFormatError,
+    CompressionError,
+    FunctionalityDisabled,
+    Base64BadData,
+    ZlibBadData,
+    XMLBadData,
+    ZstdBadData,
+    CSVBadData,
+    MissingElement,
 };
 
-pub const TiledMap = struct {
-    tileWidth: i64,
-    tileHeight: i64,
-    tilesets: std.ArrayList(Tileset),
-    layers: std.ArrayList(Layer),
+export fn globalTMXLoadImage(path: [*c]const u8) ?*anyopaque {
+    const texture2D: *rl.Texture2D = @ptrCast(@alignCast(c.malloc(@sizeOf(rl.Texture2D)) orelse return null));
+    texture2D.* = rl.loadTexture(std.mem.span(path));
+    return texture2D;
+}
 
-    pub fn new(allocator: std.mem.Allocator, path: []const u8) !TiledMap {
-        var file = try std.fs.openFileAbsolute(path, std.fs.File.OpenFlags{});
-        defer file.close();
+export fn globalTMXFreeImage(ptr: ?*anyopaque) void {
+    c.free(ptr);
+}
 
-        const contents = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
-        defer allocator.free(contents);
+pub const Map = struct {
+    tmx_map: *c.tmx_map,
 
-        const document = try xml.parse(allocator, contents);
-        defer document.deinit();
-
-        const tileWidth = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tilewidth")), 10);
-        const tileHeight = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tileheight")), 10);
-
-        var tilesets = std.ArrayList(Tileset).init(allocator);
-        {
-            var tilesetElements = document.root.findChildrenByTag("tileset");
-            while (tilesetElements.next()) |tilesetElement| {
-                try tilesets.append(try Tileset.fromXML(allocator, path, tilesetElement));
-            }
+    pub fn init(path: []const u8) !Map {
+        if (c.tmx_img_load_func == null) {
+            c.tmx_img_load_func = globalTMXLoadImage;
         }
-
-        var layers = std.ArrayList(Layer).init(allocator);
-        {
-            var layerElements = document.root.findChildrenByTag("layer");
-            while (layerElements.next()) |layerElement| {
-                try layers.append(try Layer.fromXML(allocator, layerElement));
-            }
+        if (c.tmx_img_free_func == null) {
+            c.tmx_img_free_func = globalTMXFreeImage;
         }
-
-        return TiledMap{
-            .tileWidth = tileWidth,
-            .tileHeight = tileHeight,
-            .tilesets = tilesets,
-            .layers = layers,
+        const tmx_map: *c.tmx_map = c.tmx_load(@ptrCast(path)) orelse return getCurrentError();
+        return Map{
+            .tmx_map = tmx_map,
         };
     }
 
-    pub fn deinit(self: *TiledMap) void {
-        for (self.tilesets.items) |tileset| {
-            tileset.deinit();
-        }
-        self.tilesets.deinit();
-
-        for (self.layers.items) |layer| {
-            layer.deinit();
-        }
-        self.layers.deinit();
+    pub fn deinit(self: *Map) void {
+        c.tmx_map_free(self.tmx_map);
     }
 
-    pub fn render(self: *const TiledMap) void {
-        for (self.layers.items) |item| {
-            item.render(self);
-        }
-    }
-
-    fn lookupTileset(self: *const TiledMap, tile: usize) ?*const Tileset {
-        for (self.tilesets.items) |*tileset| {
-            if (tileset.firstGID <= tile and tileset.firstGID + tileset.tileCount > tile) {
-                return tileset;
-            }
-        }
-        return null;
-    }
-};
-
-const Tileset = struct {
-    firstGID: usize,
-    tileCount: usize,
-    tileWidth: i64,
-    tileHeight: i64,
-    columns: i64,
-    texture: rl.Texture2D,
-
-    fn fromXML(allocator: std.mem.Allocator, path: []const u8, tileset: *const xml.Element) !Tileset {
-        const firstGID = try std.fmt.parseInt(usize, try must([]const u8, tileset.getAttribute("firstgid")), 10);
-        const source = try std.fs.path.resolve(
-            allocator,
-            &[_][]const u8{
-                try must([]const u8, std.fs.path.dirname(path)),
-                try must([]const u8, tileset.getAttribute("source")),
-            },
-        );
-        defer allocator.free(source);
-
-        var file = try std.fs.openFileAbsolute(source, std.fs.File.OpenFlags{});
-        defer file.close();
-
-        const contents = try file.readToEndAlloc(allocator, std.math.maxInt(usize));
-        defer allocator.free(contents);
-
-        const document = try xml.parse(allocator, contents);
-        defer document.deinit();
-
-        const tileWidth = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tilewidth")), 10);
-        const tileHeight = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("tileheight")), 10);
-        const tileCount = try std.fmt.parseInt(usize, try must([]const u8, document.root.getAttribute("tilecount")), 10);
-        const columns = try std.fmt.parseInt(i64, try must([]const u8, document.root.getAttribute("columns")), 10);
-
-
-        const imageElement = try must(*xml.Element, document.root.findChildByTag("image"));
-        const imageSource = try std.fs.path.resolve(
-            allocator,
-            &[_][]const u8{
-                try must([]const u8, std.fs.path.dirname(source)),
-                try must([]const u8, imageElement.getAttribute("source")),
-            },
-        );
-        defer allocator.free(imageSource);
-
-        const texture = rl.loadTexture(@ptrCast(imageSource));
-        return Tileset{
-            .firstGID = firstGID,
-            .tileCount = tileCount,
-            .tileWidth = tileWidth,
-            .tileHeight = tileHeight,
-            .columns = columns,
-            .texture = texture,
-        };
-    }
-
-    fn deinit(self: Tileset) void {
-        rl.unloadTexture(self.texture);
-    }
-
-    fn render(self: Tileset, tile: i64, offset: rl.Vector2) void {
-        const col = @mod(tile - 1, self.columns);
-        const row = @divTrunc(tile - 1, self.columns);
-        rl.drawTextureRec(
-            self.texture,
-            rl.Rectangle{
-                .x = @floatFromInt(col * self.tileWidth),
-                .y = @floatFromInt(row * self.tileHeight),
-                .width = @floatFromInt(self.tileWidth),
-                .height = @floatFromInt(self.tileHeight),
-            },
-            offset,
-            rl.Color.white,
-        );
-    }
-};
-
-const Layer = struct {
-    chunks: std.ArrayList(Chunk),
-
-    fn fromXML(allocator: std.mem.Allocator, layer: *const xml.Element) !Layer {
-        const data = layer.findChildByTag("data") orelse return TiledMapError.InvalidFormat;
-        const encoding = data.getAttribute("encoding") orelse return TiledMapError.InvalidFormat;
-        if (!std.mem.eql(u8, encoding, "csv")) {
-            return TiledMapError.InvalidFormat;
-        }
-
-        var chunks = std.ArrayList(Chunk).init(allocator);
-        {
-            var chunkElements = data.findChildrenByTag("chunk");
-            while (chunkElements.next()) |chunkElement| {
-                try chunks.append(try Chunk.fromXML(allocator, chunkElement));
-            }
-        }
-
-        return Layer{ .chunks = chunks };
-    }
-
-    fn deinit(self: Layer) void {
-        for (self.chunks.items) |chunk| {
-            chunk.deinit();
-        }
-        self.chunks.deinit();
-    }
-
-    fn render(self: Layer, tiledMap: *const TiledMap) void {
-        for (self.chunks.items) |chunk| {
-            chunk.render(tiledMap);
-        }
-    }
-};
-
-const Chunk = struct {
-    x: i64,
-    y: i64,
-    width: i64,
-    height: i64,
-    tiles: std.ArrayList(usize),
-
-    fn fromXML(allocator: std.mem.Allocator, chunk: *xml.Element) !Chunk {
-        const x = try std.fmt.parseInt(
-            i64,
-            chunk.getAttribute("x") orelse return TiledMapError.InvalidFormat,
-            10,
-        );
-        const y = try std.fmt.parseInt(
-            i64,
-            chunk.getAttribute("y") orelse return TiledMapError.InvalidFormat,
-            10,
-        );
-        const width = try std.fmt.parseInt(
-            i64,
-            chunk.getAttribute("width") orelse return TiledMapError.InvalidFormat,
-            10,
-        );
-        const height = try std.fmt.parseInt(
-            i64,
-            chunk.getAttribute("height") orelse return TiledMapError.InvalidFormat,
-            10,
-        );
-
-        var tiles = try std.ArrayList(usize).initCapacity(allocator, @intCast(width * height));
-        const content = switch (chunk.children[0]) {
-            .char_data => |content| content,
-            else => return TiledMapError.InvalidFormat,
-        };
-        var parts = std.mem.tokenizeAny(u8, content, ", \n");
-        while (parts.next()) |part| {
-            try tiles.append(try std.fmt.parseInt(usize, part, 10));
-        }
-        return Chunk{
-            .x = x,
-            .y = y,
-            .width = width,
-            .height = height,
-            .tiles = tiles,
-        };
-    }
-
-    fn deinit(self: Chunk) void {
-        self.tiles.deinit();
-    }
-
-    fn render(self: Chunk, tiledMap: *const TiledMap) void {
-        const xOffset = self.x * tiledMap.tileWidth;
-        const yOffset = self.y * tiledMap.tileHeight;
-        var i: i64 = 0;
-        for (self.tiles.items) |tile| {
-            defer i += 1;
-            if (tile == 0) {
+    pub fn render(self: *const Map) void {
+        var maybeLayer: ?*c.tmx_layer = self.tmx_map.ly_head;
+        while (maybeLayer) |layer| {
+            defer maybeLayer = layer.next;
+            if (layer.visible == 0) {
                 continue;
             }
 
-            const col = @mod(i, self.width);
-            const row = @divTrunc(i, self.width);
-            const tileset = tiledMap.lookupTileset(tile) orelse {
-                std.debug.print("Missing tile {}\n", .{tile});
+            switch (layer.type) {
+                c.L_GROUP => @panic("todo"),
+                c.L_OBJGR => @panic("todo"),
+                c.L_IMAGE => @panic("todo"),
+                c.L_LAYER => self.renderTileLayer(layer),
+                else => @panic("Unrecognized layer type"),
+            }
+        }
+    }
+
+    fn renderTileLayer(self: *const Map, layer: *c.tmx_layer) void {
+        for (0..self.tmx_map.width*self.tmx_map.tile_height) |i| {
+            const gid = layer.content.gids[i];
+            if (gid < 0 or gid > self.tmx_map.tilecount) {
                 continue;
+            }
+
+            if (self.tmx_map.tiles[gid] == null) {
+                continue;
+            }
+            const tile = self.tmx_map.tiles[gid].*;
+            const tileset = tile.tileset;
+
+            var maybeTexture: ?*rl.Texture2D = null;
+            if (tile.image) |img| {
+                maybeTexture = @ptrCast(@alignCast(img.*.resource_image));
+            } else {
+                maybeTexture = @ptrCast(@alignCast(tileset.*.image.*.resource_image));
+            }
+            const texture: *rl.Texture2D = maybeTexture orelse @panic("Texture should have been set on tile or tileset, but it was not.");
+
+            const source = rl.Rectangle{
+                .x = @floatFromInt(tile.ul_x),
+                .y = @floatFromInt(tile.ul_y),
+                .width = @floatFromInt(tileset.*.tile_width),
+                .height = @floatFromInt(tileset.*.tile_height),
             };
-            tileset.render(
-                @intCast(tile),
-                rl.Vector2{
-                    .x = @floatFromInt(xOffset + col * tileset.tileWidth),
-                    .y = @floatFromInt(yOffset + row * tileset.tileHeight),
-                },
+
+            const col = i % self.tmx_map.width;
+            const row = i / self.tmx_map.height;
+            const position = rl.Vector2{
+                .x = @floatFromInt(col * tileset.*.tile_width),
+                .y = @floatFromInt(row * tileset.*.tile_height),
+            };
+            rl.drawTextureRec(
+                texture.*,
+                source,
+                position,
+                rl.Color.white,
             );
         }
     }
 };
+
+fn getCurrentError() MapError {
+    switch (c.tmx_errno) {
+        c.E_UNKN => return MapError.Unknown,
+        c.E_INVAL => return MapError.InvalidArgument,
+        c.E_ALLOC => return MapError.AllocationError,
+        c.E_ACCESS => return MapError.NoAccess,
+        c.E_NOENT => return MapError.FileNotFound,
+        c.E_FORMAT => return MapError.FileFormatError,
+        c.E_ENCCMP => return MapError.CompressionError,
+        c.E_FONCT => return MapError.FunctionalityDisabled,
+        c.E_BDATA => return MapError.Base64BadData,
+        c.E_ZDATA => return MapError.ZlibBadData,
+        c.E_XDATA => return MapError.XMLBadData,
+        c.E_ZSDATA => return MapError.ZstdBadData,
+        c.E_CDATA => return MapError.CSVBadData,
+        c.E_MISSEL => return MapError.MissingElement,
+        else => @panic("getCurrentError() called with unknown or unset TMX error."),
+    }
+}

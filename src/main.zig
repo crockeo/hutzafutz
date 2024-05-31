@@ -11,7 +11,7 @@ const World = struct {
     inputManager: input.InputManager,
     player: Player,
     asdf: rl.Rectangle,
-    map: tiled.TiledMap,
+    map: tiled.Map,
 
     pub fn new(allocator: std.mem.Allocator, project_root: std.fs.Dir) !World {
         const inputManager = input.InputManager.new(.{
@@ -26,10 +26,7 @@ const World = struct {
         const mapPath = try project_root.realpathAlloc(allocator, "./assets/kenney-pixel-platformer/Tiled/tilemap-example-a.tmx");
         // const mapPath = try project_root.realpathAlloc(allocator, "./assets/maps/home.tmx");
         defer allocator.free(mapPath);
-        const map = try tiled.TiledMap.new(
-            allocator,
-            mapPath,
-        );
+        const map = try tiled.Map.init(mapPath);
 
         return World{
             .inputManager = inputManager,
