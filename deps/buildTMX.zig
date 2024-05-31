@@ -19,6 +19,9 @@ pub fn build(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.buil
             "tmx_utils.c",
             "tmx_xml.c",
         },
+        .flags = &.{
+            "-fno-delete-null-pointer-checks",
+        },
     });
 
     return tmx;

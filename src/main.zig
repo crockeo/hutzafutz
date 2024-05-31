@@ -46,8 +46,8 @@ const World = struct {
     }
 
     pub fn render(self: *const World) void {
-        self.player.render();
         self.map.render();
+        self.player.render();
     }
 
     pub fn update(self: *World, frameTime: f32) void {

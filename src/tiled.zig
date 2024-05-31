@@ -105,7 +105,7 @@ pub const Map = struct {
             };
 
             const col = i % self.tmx_map.width;
-            const row = i / self.tmx_map.height;
+            const row = i / self.tmx_map.width;
             const position = rl.Vector2{
                 .x = @floatFromInt(col * tileset.*.tile_width),
                 .y = @floatFromInt(row * tileset.*.tile_height),
