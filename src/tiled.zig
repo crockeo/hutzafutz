@@ -79,6 +79,7 @@ pub const Map = struct {
         for (0..self.tmx_map.width*self.tmx_map.tile_height) |i| {
             const gid = layer.content.gids[i];
             if (gid < 0 or gid > self.tmx_map.tilecount) {
+                // TODO: why do these exist in the map? what are we supposed to do with them?
                 continue;
             }
 
